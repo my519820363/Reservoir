@@ -1,5 +1,7 @@
 package com.anupcowkur.reservoir;
 
+import java.lang.reflect.Type;
+
 import android.content.Context;
 import android.os.AsyncTask;
 
@@ -78,6 +80,25 @@ public class Reservoir {
             throw new NullPointerException();
         return value;
     }
+    
+    /**
+	 * Get an object from Reservoir with the given key. This a blocking IO
+	 * operation.
+	 *
+	 * @param key
+	 *            the key string.
+	 * @param typeOfT
+	 *            the TypeToken of the expected return object.
+	 * @return the object of the given type if it exists.
+	 */
+	public static <T> T get(String key, Type typeOfT) throws Exception {
+
+		String json = cache.getString(key).getString();
+		T value = new Gson().fromJson(json, typeOfT);
+		if (value == null)
+			throw new NullPointerException();
+		return value;
+	}
 
     /**
      * Get an object from Reservoir with the given key asynchronously.
@@ -91,6 +112,21 @@ public class Reservoir {
         new GetTask<T>(key, classOfT, callback).execute();
     }
 
+    /**
+	 * Get an object from Reservoir with the given key asynchronously.
+	 *
+	 * @param key
+	 *            the key string.
+	 * @param callback
+	 *            a callback of type
+	 *            {@link com.anupcowkur.reservoir.ReservoirGetCallback} which is
+	 *            called upon completion.
+	 */
+	public static <T> void getAsync(String key, Type typeOfT,
+			ReservoirGetCallback<T> callback) {
+		new GetTask<T>(key, typeOfT, callback).execute();
+	}
+	
     /**
      * Delete an object from Reservoir with the given key. This a blocking IO operation. Previously
      * stored object with the same
@@ -163,41 +199,58 @@ public class Reservoir {
     private static class GetTask<T> extends AsyncTask<Void, Void, T> {
 
         private final String key;
-        private final ReservoirGetCallback callback;
-        private final Class<T> classOfT;
-        private Exception e;
+		private final ReservoirGetCallback callback;
+		private final Class<T> classOfT;
+		private final Type typeOfT;
+		private Exception e;
 
-        private GetTask(String key, Class<T> classOfT, ReservoirGetCallback callback) {
-            this.key = key;
-            this.callback = callback;
-            this.classOfT = classOfT;
-            this.e = null;
-        }
+		private GetTask(String key, Class<T> classOfT,
+				ReservoirGetCallback callback) {
+			this.key = key;
+			this.callback = callback;
+			this.classOfT = classOfT;
+			this.typeOfT = null;
+			this.e = null;
+		}
 
-        @Override
-        protected T doInBackground(Void... params) {
-            try {
-                String json = cache.getString(key).getString();
-                T value = new Gson().fromJson(json, classOfT);
-                if (value == null)
-                    throw new NullPointerException();
-                return value;
-            } catch (Exception e) {
-                this.e = e;
-                return null;
-            }
-        }
+		private GetTask(String key, Type typeOfT, ReservoirGetCallback callback) {
+			this.key = key;
+			this.callback = callback;
+			this.classOfT = null;
+			this.typeOfT = typeOfT;
+			this.e = null;
+		}
 
-        @Override
-        protected void onPostExecute(T object) {
-            if (callback != null) {
-                if (e == null) {
-                    callback.onSuccess(object);
-                } else {
-                    callback.onFailure(e);
-                }
-            }
-        }
+		@Override
+		protected T doInBackground(Void... params) {
+			try {
+				String json = cache.getString(key).getString();
+				T value = null;
+				if (classOfT != null) {
+					value = new Gson().fromJson(json, classOfT);
+				} else if (typeOfT != null) {
+					value = new Gson().fromJson(json, typeOfT);
+				}
+
+				if (value == null)
+					throw new NullPointerException();
+				return value;
+			} catch (Exception e) {
+				this.e = e;
+				return null;
+			}
+		}
+
+		@Override
+		protected void onPostExecute(T object) {
+			if (callback != null) {
+				if (e == null) {
+					callback.onSuccess(object);
+				} else {
+					callback.onFailure(e);
+				}
+			}
+		}
 
     }
 
